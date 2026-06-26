@@ -33,7 +33,7 @@ curl http://localhost:8001/api/health
 |---|---|---|
 | FastAPI app | 8001 | Our API (host 8001 → container 8000) |
 | Postiz frontend | 5000 | Postiz UI |
-| Postiz API | 3000 | Postiz REST API (`/public/v1/...`) |
+| Postiz API | 5000/api | Postiz REST API — nginx routes `/api/` → NestJS (`/api/public/v1/...`) |
 | Our Postgres | 5432 | App database |
 
 Port 8001 is used on the host because port 8000 was in use on this machine.

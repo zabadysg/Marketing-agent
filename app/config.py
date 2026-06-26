@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     critic_model: str = "claude-haiku-4-5-20251001"
 
     # Postiz
-    postiz_api_url: str = "http://postiz:3000"
+    postiz_api_url: str = "http://postiz:5000"
     postiz_api_key: SecretStr = Field(default=SecretStr("placeholder"))
 
 

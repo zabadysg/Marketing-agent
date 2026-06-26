@@ -59,7 +59,10 @@ class PostizClient:
         timeout: float = 30.0,
     ) -> None:
         resolved_api_url = (base_url or settings.postiz_api_url).rstrip("/")
-        self._base_url = f"{resolved_api_url}/public/v1"
+        # Postiz's internal nginx routes /api/ → NestJS backend
+        # Public API endpoints are registered as /public/v1/... on NestJS,
+        # so external callers must use /api/public/v1/...
+        self._base_url = f"{resolved_api_url}/api/public/v1"
         self._api_key = api_key or settings.postiz_api_key.get_secret_value()
         self._client = httpx.AsyncClient(
             base_url=self._base_url,

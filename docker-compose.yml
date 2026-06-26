@@ -11,7 +11,7 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-marketing}"
-      POSTIZ_API_URL: "http://postiz:3000"
+      POSTIZ_API_URL: "http://postiz:5000"
     depends_on:
       db:
         condition: service_healthy
@@ -70,8 +70,7 @@ services:
       postiz-redis:
         condition: service_healthy
     ports:
-      - "127.0.0.1:5000:5000"   # Next.js frontend UI
-      - "127.0.0.1:3000:3000"   # NestJS backend API
+      - "127.0.0.1:5000:5000"   # Postiz nginx (serves UI at / and API at /api/)
     volumes:
       - postiz-config:/config/
       - postiz-uploads:/uploads/

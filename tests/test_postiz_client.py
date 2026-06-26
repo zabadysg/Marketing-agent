@@ -6,7 +6,8 @@ from app.clients.postiz import PostizAuthError, PostizClient, PostizError
 
 POSTIZ_BASE_URL = "http://postiz-test:5000"
 POSTIZ_API_KEY = "test-api-key-12345"
-INTEGRATIONS_URL = f"{POSTIZ_BASE_URL}/public/v1/integrations"
+# PostizClient appends /api/public/v1 to the base URL
+INTEGRATIONS_URL = f"{POSTIZ_BASE_URL}/api/public/v1/integrations"
 
 MOCK_INTEGRATIONS = [
     {"id": "int-1", "name": "Twitter @acme", "type": "x"},
