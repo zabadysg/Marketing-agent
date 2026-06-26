@@ -1,14 +1,19 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models.enums import PostStatus
+from app.models.enums import AutonomyLevel, PostStatus
 from app.models.post import Post
+from app.models.workspace import Workspace
 from app.schemas.plan import PostResponse
-from app.schemas.post import PostEditRequest, RegenerateRequest, RejectRequest
+from app.schemas.post import PostEditRequest, RegenerateRequest, RejectRequest, ScheduleRequest
 from app.services.action_log import log_action
 from app.services.post_status import InvalidTransition, transition
+from app.clients.postiz import PostizRateLimitError
+from app.services.publishing import AlreadyScheduledError, schedule_post
 from app.services.regenerate import regenerate_post
 
 router = APIRouter(prefix="/posts", tags=["posts"])
@@ -104,3 +109,48 @@ async def regenerate(
     note = body.note if body else None
     background_tasks.add_task(regenerate_post, post_id=post_id, note=note)
     return post
+
+
+@router.post("/{post_id}:schedule", response_model=PostResponse)
+async def schedule(
+    post_id: str,
+    body: ScheduleRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    post = await _get_post_or_404(db, post_id)
+
+    if PostStatus(post.status) != PostStatus.approved:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Post must be approved before scheduling (current: {post.status})",
+        )
+
+    # Autonomy gate: supervised workspaces require explicit human action (this endpoint).
+    # assisted/autonomous workspaces allow the same endpoint — future phases may add
+    # auto-trigger hooks, but the gate logic is the same for now.
+    ws_result = await db.execute(select(Workspace).where(Workspace.id == post.workspace_id))
+    workspace = ws_result.scalar_one_or_none()
+    if workspace and AutonomyLevel(workspace.autonomy_level) == AutonomyLevel.supervised:
+        pass  # explicit call is the required path; nothing to block
+
+    try:
+        when = datetime.fromisoformat(body.when.replace("Z", "+00:00")).astimezone(timezone.utc)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid datetime format for 'when'")
+
+    try:
+        updated = await schedule_post(
+            db=db,
+            post=post,
+            integration_id=body.integration_id,
+            provider=body.provider,
+            when=when,
+        )
+    except AlreadyScheduledError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except PostizRateLimitError:
+        raise HTTPException(
+            status_code=503, detail="Postiz rate limit reached; try again later"
+        )
+
+    return updated

@@ -13,3 +13,9 @@ class PostEditRequest(BaseModel):
 
 class RegenerateRequest(BaseModel):
     note: str | None = None
+
+
+class ScheduleRequest(BaseModel):
+    integration_id: str
+    provider: str
+    when: str  # ISO-8601 datetime string, e.g. "2026-07-01T09:00:00Z"
