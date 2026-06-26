@@ -1,27 +1,39 @@
 import os
 
-# Override DATABASE_URL before app modules are imported so the engine points to
-# the locally exposed Postgres (127.0.0.1:5432) instead of Docker's 'db:5432'.
+# Set before any app imports so settings and engine pick up the local URL.
 os.environ.setdefault(
     "DATABASE_URL",
     "postgresql+asyncpg://postgres:changeme@localhost:5432/marketing",
 )
-# Keep LangSmith off during tests
 os.environ.setdefault("LANGSMITH_TRACING", "false")
 
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
+from app.database import get_db
 from app.main import app
 
+# NullPool: each test gets a fresh connection, no loop-affinity issues between tests.
 _test_engine = create_async_engine(
-    os.environ["DATABASE_URL"], echo=False, pool_pre_ping=True
+    os.environ["DATABASE_URL"], echo=False, poolclass=NullPool
 )
 _TestSessionLocal = async_sessionmaker(
     _test_engine, class_=AsyncSession, expire_on_commit=False
 )
+
+
+async def _override_get_db():
+    async with _TestSessionLocal() as session:
+        try:
+            yield session
+        finally:
+            await session.close()
+
+
+app.dependency_overrides[get_db] = _override_get_db
 
 
 @pytest_asyncio.fixture
