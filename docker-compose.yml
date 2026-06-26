@@ -1,0 +1,117 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: marketing-app
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8001:8000"
+    env_file: .env
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-marketing}"
+      POSTIZ_API_URL: "http://postiz:5000"
+    depends_on:
+      db:
+        condition: service_healthy
+      postiz:
+        condition: service_started
+    networks: [marketing-net]
+    volumes:
+      - app-logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  db:
+    image: postgres:16-alpine
+    container_name: marketing-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER:-postgres}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-changeme}"
+      POSTGRES_DB: "${POSTGRES_DB:-marketing}"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks: [marketing-net]
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  postiz:
+    image: ghcr.io/gitroomhq/postiz-app:v2.11.3
+    container_name: marketing-postiz
+    restart: unless-stopped
+    environment:
+      MAIN_URL: "https://${DOMAIN:-localhost}"
+      FRONTEND_URL: "https://${DOMAIN:-localhost}"
+      NEXT_PUBLIC_BACKEND_URL: "https://${DOMAIN:-localhost}/api"
+      BACKEND_INTERNAL_URL: "http://localhost:3000"
+      DATABASE_URL: "postgresql://${POSTIZ_DB_USER:-postiz_user}:${POSTIZ_DB_PASSWORD:-postiz_pass}@postiz-db:5432/${POSTIZ_DB_NAME:-postiz}"
+      REDIS_URL: "redis://postiz-redis:6379"
+      JWT_SECRET: "${POSTIZ_JWT_SECRET:-changeme-jwt-secret-at-least-32-chars}"
+      IS_GENERAL: "true"
+      DISABLE_REGISTRATION: "false"
+      STORAGE_PROVIDER: "local"
+      UPLOAD_DIRECTORY: "/uploads"
+      NEXT_PUBLIC_UPLOAD_DIRECTORY: "/uploads"
+    depends_on:
+      postiz-db:
+        condition: service_healthy
+      postiz-redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:5000:5000"
+    volumes:
+      - postiz-config:/config/
+      - postiz-uploads:/uploads/
+    networks: [marketing-net]
+
+  postiz-db:
+    image: postgres:16-alpine
+    container_name: marketing-postiz-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: "${POSTIZ_DB_USER:-postiz_user}"
+      POSTGRES_PASSWORD: "${POSTIZ_DB_PASSWORD:-postiz_pass}"
+      POSTGRES_DB: "${POSTIZ_DB_NAME:-postiz}"
+    volumes:
+      - postiz-postgres-data:/var/lib/postgresql/data
+    networks: [marketing-net]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTIZ_DB_USER:-postiz_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  postiz-redis:
+    image: redis:7-alpine
+    container_name: marketing-postiz-redis
+    restart: unless-stopped
+    networks: [marketing-net]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+networks:
+  marketing-net:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  postiz-postgres-data:
+  postiz-config:
+  postiz-uploads:
+  app-logs:
