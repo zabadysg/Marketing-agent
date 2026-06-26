@@ -1,4 +1,3 @@
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -6,7 +5,6 @@ from sqlalchemy import select
 
 from app.agents.schemas import ContentIdea, ContentOutput, CriticOutput, StrategyOutput
 from app.models.action_log import ActionLog
-from app.models.post import Post
 
 BRAND_PAYLOAD = {
     "name": "Acme",
@@ -57,7 +55,7 @@ async def test_generate_and_poll_plan(test_client, db_session):
     ):
         # POST plans:generate — inject test session factory so background task
         # writes to the same DB instance the test assertions read from.
-        with patch("app.routers.plans.run_generation") as mock_run_gen:
+        with patch("app.routers.plans.run_generation"):
             resp = await test_client.post(
                 f"/api/workspaces/{workspace_id}/plans:generate",
                 json={"goal": "launch product"},
@@ -96,7 +94,7 @@ async def test_generate_and_poll_plan(test_client, db_session):
     )
     logs = result.scalars().all()
     # workspace created log + brand log + 15 generation logs = 17 total
-    generation_logs = [l for l in logs if l.actor in ("strategy_node", "content_node", "critic_node")]
+    generation_logs = [entry for entry in logs if entry.actor in ("strategy_node", "content_node", "critic_node")]
     assert len(generation_logs) == 15
 
 

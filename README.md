@@ -103,6 +103,71 @@ Decision deferred to Phase 4.
 | Phase | Status | What |
 |---|---|---|
 | 1 — Foundation | **Done** | FastAPI + Docker + Postiz + PostizClient |
-| 2 — First agent | Pending | Models + brand endpoints + draft generation |
+| 2 — First agent | **Done** | Gemini + LangGraph + brand endpoints + draft generation |
 | 3 — Approval gate | Pending | Status machine + approve/reject/schedule |
 | 4 — The loop | Pending | Analytics → feed next plan |
+
+## LangGraph generation flow (Phase 2)
+
+```
+POST /plans:generate
+        │
+        ▼
+  strategy_node  ──────────────────────────────────────────────┐
+  (gemini-2.5-pro)                                             │
+  → 7 ContentIdeas                                             │
+        │                                                      │
+        ▼  (repeat for each idea)                              │
+  content_node                                                 │
+  (gemini-2.5-pro)                                             │
+  → ContentOutput {content, hashtags, suggested_time}         │
+        │                                                      │
+        ▼                                                      │
+  critic_node                                                  │
+  (gemini-2.5-flash)                                           │
+  → CriticOutput {approved, issues, fixed_body?}               │
+        │                                                      │
+        ├─ not approved + revision_count == 0 ──► apply        │
+        │   fixed_body, set revision_count=1 → content_node   │
+        │                                                      │
+        └─ approved (or revision exhausted) ──► append post   │
+                                                               │
+  advance_node: current_idx++ → next idea or END ─────────────┘
+```
+
+All agents use `with_structured_output(Schema, method="json_schema")` — no
+free-form JSON parsing. Nodes are DB-pure: they accumulate `action_logs` in
+state; `run_generation` writes all logs + Post rows in one transaction.
+
+**Model tiers:**
+- `gemini-2.5-pro` (`REASONING_MODEL`) — strategy + content (reasoning-heavy)
+- `gemini-2.5-flash` (`CHEAP_MODEL`) — critic (fast + cheap review)
+
+**MemorySaver checkpointer** — in-memory only. Phase 3 will swap to a Postgres
+checkpointer so paused human-in-the-loop runs survive restarts.
+
+## Enabling LangSmith tracing
+
+```bash
+# In .env:
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=your-key-here
+LANGSMITH_PROJECT=marketing-agent
+```
+
+When enabled, every `graph.ainvoke` call produces a trace at smith.langchain.com.
+Leave `LANGSMITH_TRACING=false` (default) for local dev and all tests.
+
+## Phase 2 API
+
+```
+POST /api/workspaces                      — create workspace
+GET  /api/workspaces/{id}                 — fetch workspace
+PUT  /api/workspaces/{id}/brand           — upsert brand profile
+GET  /api/workspaces/{id}/brand           — fetch brand profile
+POST /api/workspaces/{id}/plans:generate  — start generation (202, background)
+GET  /api/workspaces/{id}/plans/{plan_id} — poll status + posts
+```
+
+Posts land in `pending_approval` — **nothing is published**. Phase 3 adds the
+approve / reject / schedule workflow and Postiz integration.
