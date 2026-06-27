@@ -32,17 +32,19 @@ curl http://localhost:8001/api/health
 | Service | Port | Purpose |
 |---|---|---|
 | FastAPI app | 8001 | Our API (host 8001 → container 8000) |
-| Postiz frontend | 5000 | Postiz UI |
-| Postiz API | 5000/api | Postiz REST API — nginx routes `/api/` → NestJS (`/api/public/v1/...`) |
+| Postiz frontend | 5174 | Postiz UI (host 5174 → container 5000) |
+| Postiz API | 5174/api | Postiz REST API — nginx routes `/api/` → NestJS (`/api/public/v1/...`) |
 | Our Postgres | 5432 | App database |
 
 Port 8001 is used on the host because port 8000 was in use on this machine.
+Port 5174 is used on the host because port 5000 is occupied by macOS AirPlay Receiver.
+The app container always talks to Postiz via the internal Docker network (`http://postiz:5000`), so `POSTIZ_API_URL` in docker-compose.yml stays unchanged.
 
 ## Postiz API key setup
 
 After `make dev-build`:
 
-1. Open [http://localhost:5000](http://localhost:5000) — create an account
+1. Open [http://localhost:5174](http://localhost:5174) — create an account
 2. Settings → Developer → API Keys → Create Key
 3. Copy the key → set `POSTIZ_API_KEY=<key>` in `.env`
 4. `docker compose restart app`
