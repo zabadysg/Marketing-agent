@@ -43,12 +43,9 @@ async def schedule_post(
             scheduled_at=when,
         )
 
-    # Extract the Postiz-assigned ID; response shape varies
-    postiz_id = (
-        result.get("id")
-        or (result.get("posts") or [{}])[0].get("id")
-        or ""
-    )
+    # Postiz returns a list of created post objects
+    first = result[0] if isinstance(result, list) else result
+    postiz_id = first.get("id") or ""
     post.postiz_post_id = str(postiz_id)
     transition(post, PostStatus.scheduled)
 

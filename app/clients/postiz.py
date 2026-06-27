@@ -115,7 +115,10 @@ class PostizClient:
                 {
                     "integration": {"id": integration_id},
                     "value": [{"content": content, "image": images or []}],
-                    "settings": {"__type": provider},
+                    "settings": {
+                        "__type": provider,
+                        **({"who_can_reply_post": "everyone"} if provider == "x" else {}),
+                    },
                 }
             ],
         }
