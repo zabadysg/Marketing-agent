@@ -236,7 +236,11 @@ async def delete_post(post_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/logs", response_model=list[AdminLog])
-async def list_logs(limit: int = 100, offset: int = 0, db: AsyncSession = Depends(get_db)):
+async def list_logs(
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db),
+):
     result = await db.execute(
         select(ActionLog)
         .order_by(ActionLog.created_at.desc())
