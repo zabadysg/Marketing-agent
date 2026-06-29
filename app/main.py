@@ -11,8 +11,6 @@ from app.routers import workspaces, brand_profiles, plans, posts, connections, a
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with engine.begin() as conn:
-        await conn.run_sync(lambda _: None)
     yield
     await engine.dispose()
 

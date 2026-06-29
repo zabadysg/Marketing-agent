@@ -5,9 +5,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models.enums import AutonomyLevel, PostStatus
+from app.models.enums import PostStatus
 from app.models.post import Post
-from app.models.workspace import Workspace
 from app.schemas.plan import PostResponse
 from app.schemas.post import PostEditRequest, RegenerateRequest, RejectRequest, ScheduleRequest
 from app.services.action_log import log_action
@@ -124,14 +123,6 @@ async def schedule(
             status_code=409,
             detail=f"Post must be approved before scheduling (current: {post.status})",
         )
-
-    # Autonomy gate: supervised workspaces require explicit human action (this endpoint).
-    # assisted/autonomous workspaces allow the same endpoint — future phases may add
-    # auto-trigger hooks, but the gate logic is the same for now.
-    ws_result = await db.execute(select(Workspace).where(Workspace.id == post.workspace_id))
-    workspace = ws_result.scalar_one_or_none()
-    if workspace and AutonomyLevel(workspace.autonomy_level) == AutonomyLevel.supervised:
-        pass  # explicit call is the required path; nothing to block
 
     try:
         when = datetime.fromisoformat(body.when.replace("Z", "+00:00")).astimezone(timezone.utc)

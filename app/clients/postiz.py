@@ -91,9 +91,6 @@ class PostizClient:
 
         return await _with_backoff(_call)
 
-    async def list_accounts(self) -> list[dict[str, Any]]:
-        return await self.list_integrations()
-
     async def schedule_post(
         self,
         integration_id: str,
