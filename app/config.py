@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     environment: str = Field(default="development", alias="APP_ENV")
     debug: bool = False
+    allowed_origins: list[str] = ["http://localhost:3000", "http://localhost:8001"]
 
     # Database
     database_url: str = "postgresql+asyncpg://postgres:changeme@db:5432/marketing"
