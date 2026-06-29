@@ -24,7 +24,7 @@ async def read(plan_id: str, timeout: float = 30.0) -> Optional[dict]:
     if q is None:
         return None
     try:
-        return await asyncio.wait_for(asyncio.shield(q.get()), timeout=timeout)
+        return await asyncio.wait_for(q.get(), timeout=timeout)
     except asyncio.TimeoutError:
         return {"type": "ping"}
 
