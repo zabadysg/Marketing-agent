@@ -3,7 +3,7 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from app.agents.graph import generation_graph
+from app.agents import graph as _graph_mod
 from app.database import AsyncSessionLocal
 from app.models.action_log import ActionLog
 from app.models.content_plan import ContentPlan
@@ -38,42 +38,49 @@ async def run_generation(
                 "plan_id": plan_id,
             }
 
-            final_state = await generation_graph.ainvoke(
+            final_state = await _graph_mod.generation_graph.ainvoke(
                 initial_state,
                 config={"configurable": {"thread_id": plan_id}},
             )
 
-            # Persist posts and action logs in one transaction
+            # Persist posts and action logs in one transaction.
+            # Idempotency guard: if posts already exist (crash-after-commit scenario
+            # where ainvoke returns from END checkpoint but status never updated),
+            # skip the insert and just mark the plan ready.
             result = await db.execute(
                 select(ContentPlan).where(ContentPlan.id == plan_id)
             )
             plan = result.scalar_one()
 
-            for post_dict in final_state["finished_posts"]:
-                db.add(
-                    Post(
-                        plan_id=plan_id,
-                        workspace_id=workspace_id,
-                        day=post_dict["day"],
-                        theme=post_dict["theme"],
-                        format=post_dict["format"],
-                        angle=post_dict["angle"],
-                        content=post_dict["content"],
-                        hashtags=post_dict.get("hashtags", []),
-                        suggested_time=post_dict.get("suggested_time", ""),
+            existing = await db.execute(
+                select(Post.id).where(Post.plan_id == plan_id).limit(1)
+            )
+            if existing.scalar_one_or_none() is None:
+                for post_dict in final_state["finished_posts"]:
+                    db.add(
+                        Post(
+                            plan_id=plan_id,
+                            workspace_id=workspace_id,
+                            day=post_dict["day"],
+                            theme=post_dict["theme"],
+                            format=post_dict["format"],
+                            angle=post_dict["angle"],
+                            content=post_dict["content"],
+                            hashtags=post_dict.get("hashtags", []),
+                            suggested_time=post_dict.get("suggested_time", ""),
+                        )
                     )
-                )
 
-            for log_dict in final_state["action_logs"]:
-                db.add(
-                    ActionLog(
-                        workspace_id=workspace_id,
-                        actor=log_dict["actor"],
-                        action=log_dict["action"],
-                        payload=log_dict.get("payload", {}),
-                        result=log_dict.get("result"),
+                for log_dict in final_state["action_logs"]:
+                    db.add(
+                        ActionLog(
+                            workspace_id=workspace_id,
+                            actor=log_dict["actor"],
+                            action=log_dict["action"],
+                            payload=log_dict.get("payload", {}),
+                            result=log_dict.get("result"),
+                        )
                     )
-                )
 
             plan.status = PlanStatus.ready.value
             await db.commit()
