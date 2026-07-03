@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { approvePost, rejectPost, editPost, regeneratePost } from '../api'
+import { approvePost, rejectPost, editPost, regeneratePost, submitDraftPost, deleteDraftPost } from '../api'
 import type { Post } from '../types'
 import ScheduleModal from './ScheduleModal'
 
@@ -7,6 +7,7 @@ interface Props {
   post: Post
   wsId: string
   onUpdate: (updated: Post) => void
+  onDelete?: (postId: string) => void
 }
 
 const STATUS_STYLES: Record<string, string> = {
@@ -19,12 +20,12 @@ const STATUS_STYLES: Record<string, string> = {
 }
 
 const STATUS_LABEL: Record<string, string> = {
-  pending_approval: 'Pending Approval',
-  approved: 'Approved',
-  scheduled: 'Scheduled',
-  published: 'Published',
-  rejected: 'Rejected',
-  draft: 'Draft',
+  pending_approval: 'في انتظار الموافقة',
+  approved: 'مُعتمد',
+  scheduled: 'مُجدول',
+  published: 'منشور',
+  rejected: 'مرفوض',
+  draft: 'مسودة',
 }
 
 const FORMAT_EMOJI: Record<string, string> = {
@@ -32,8 +33,9 @@ const FORMAT_EMOJI: Record<string, string> = {
   image: '🖼️', reel: '🎬', story: '📱', poll: '📊', quote: '💬',
 }
 
-export default function PostCard({ post, wsId, onUpdate }: Props) {
+export default function PostCard({ post, wsId, onUpdate, onDelete }: Props) {
   const [busy, setBusy] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editContent, setEditContent] = useState(post.content)
   const [editHashtags, setEditHashtags] = useState((post.hashtags || []).join(' '))
@@ -52,7 +54,7 @@ export default function PostCard({ post, wsId, onUpdate }: Props) {
       const result = await fn()
       if (result) onUpdate(result as Post)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Action failed')
+      setError(err instanceof Error ? err.message : 'فشلت العملية')
     } finally {
       setBusy(null)
     }
@@ -88,16 +90,16 @@ export default function PostCard({ post, wsId, onUpdate }: Props) {
     <div className={`bg-white border rounded-xl shadow-sm overflow-hidden ${post.status === 'rejected' ? 'opacity-60' : ''}`}>
       {/* Card header */}
       <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-gray-500">Day {post.day}</span>
-          <span className="text-gray-300">·</span>
-          <span className="text-sm text-gray-600">{FORMAT_EMOJI[post.format] ?? '📝'} {post.format}</span>
-          <span className="text-gray-300">·</span>
-          <span className="text-sm text-gray-500">{post.suggested_time}</span>
-        </div>
         <span className={`text-xs font-medium px-2.5 py-1 rounded-full border ${STATUS_STYLES[post.status] ?? STATUS_STYLES.draft}`}>
           {STATUS_LABEL[post.status] ?? post.status}
         </span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-500">{post.suggested_time}</span>
+          <span className="text-gray-300">·</span>
+          <span className="text-sm text-gray-600">{FORMAT_EMOJI[post.format] ?? '📝'} {post.format}</span>
+          <span className="text-gray-300">·</span>
+          <span className="text-sm font-medium text-gray-500">{post.day === 0 ? 'غير مُجدول' : `اليوم ${post.day}`}</span>
+        </div>
       </div>
 
       {/* Theme/angle */}
@@ -128,9 +130,9 @@ export default function PostCard({ post, wsId, onUpdate }: Props) {
             />
             <div className="flex gap-2">
               <button onClick={handleSaveEdit} disabled={busy === 'save'} className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
-                {busy === 'save' ? 'Saving…' : 'Save'}
+                {busy === 'save' ? 'جارٍ الحفظ…' : 'حفظ'}
               </button>
-              <button onClick={() => setEditing(false)} className="px-3 py-1.5 rounded-lg text-xs text-gray-600 hover:bg-gray-100 transition-colors">Cancel</button>
+              <button onClick={() => setEditing(false)} className="px-3 py-1.5 rounded-lg text-xs text-gray-600 hover:bg-gray-100 transition-colors">إلغاء</button>
             </div>
           </div>
         ) : (
@@ -152,14 +154,14 @@ export default function PostCard({ post, wsId, onUpdate }: Props) {
           <input
             value={rejectReason}
             onChange={e => setRejectReason(e.target.value)}
-            placeholder="Reason (optional)"
+            placeholder="السبب (اختياري)"
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
           />
           <div className="flex gap-2">
             <button onClick={handleReject} disabled={busy === 'reject'} className="bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
-              {busy === 'reject' ? 'Rejecting…' : 'Confirm Reject'}
+              {busy === 'reject' ? 'جارٍ الرفض…' : 'تأكيد الرفض'}
             </button>
-            <button onClick={() => setShowReject(false)} className="px-3 py-1.5 rounded-lg text-xs text-gray-600 hover:bg-gray-100 transition-colors">Cancel</button>
+            <button onClick={() => setShowReject(false)} className="px-3 py-1.5 rounded-lg text-xs text-gray-600 hover:bg-gray-100 transition-colors">إلغاء</button>
           </div>
         </div>
       )}
@@ -170,14 +172,14 @@ export default function PostCard({ post, wsId, onUpdate }: Props) {
           <input
             value={regenNote}
             onChange={e => setRegenNote(e.target.value)}
-            placeholder="Note for AI e.g. make it funnier (optional)"
+            placeholder="ملاحظة للذكاء الاصطناعي مثل: اجعله أكثر مرحاً (اختياري)"
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400"
           />
           <div className="flex gap-2">
             <button onClick={handleRegen} disabled={busy === 'regen'} className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
-              {busy === 'regen' ? 'Sending…' : 'Regenerate'}
+              {busy === 'regen' ? 'جارٍ الإرسال…' : 'إعادة توليد'}
             </button>
-            <button onClick={() => setShowRegen(false)} className="px-3 py-1.5 rounded-lg text-xs text-gray-600 hover:bg-gray-100 transition-colors">Cancel</button>
+            <button onClick={() => setShowRegen(false)} className="px-3 py-1.5 rounded-lg text-xs text-gray-600 hover:bg-gray-100 transition-colors">إلغاء</button>
           </div>
         </div>
       )}
@@ -185,13 +187,57 @@ export default function PostCard({ post, wsId, onUpdate }: Props) {
       {/* Action bar */}
       {!isTerminal && !editing && !showReject && !showRegen && (
         <div className="px-5 py-3 border-t border-gray-100 bg-gray-50 flex flex-wrap gap-2">
+          {post.status === 'draft' && (
+            <button
+              onClick={() => run('submit', () => submitDraftPost(post.id))}
+              disabled={busy !== null}
+              className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+            >
+              {busy === 'submit' ? '…' : '↑ إرسال للموافقة'}
+            </button>
+          )}
+          {post.status === 'draft' && confirmDelete && (
+            <div className="flex items-center gap-2 mr-auto">
+              <span className="text-xs text-gray-500">حذف هذا المنشور؟</span>
+              <button
+                onClick={async () => {
+                  setBusy('delete')
+                  try {
+                    await deleteDraftPost(post.id)
+                    onDelete?.(post.id)
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : 'فشل الحذف')
+                    setBusy(null)
+                  }
+                }}
+                disabled={busy !== null}
+                className="bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+              >
+                {busy === 'delete' ? '…' : 'تأكيد'}
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                className="px-3 py-1.5 rounded-lg text-xs text-gray-600 hover:bg-gray-100 transition-colors"
+              >
+                إلغاء
+              </button>
+            </div>
+          )}
+          {post.status === 'draft' && !confirmDelete && (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              className="bg-white border border-red-200 hover:border-red-300 text-red-500 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors mr-auto"
+            >
+              🗑 حذف
+            </button>
+          )}
           {post.status === 'pending_approval' && (
             <button
               onClick={() => run('approve', () => approvePost(post.id))}
               disabled={busy !== null}
               className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
             >
-              {busy === 'approve' ? '…' : '✓ Approve'}
+              {busy === 'approve' ? '…' : '✓ موافقة'}
             </button>
           )}
           {post.status === 'approved' && (
@@ -199,26 +245,26 @@ export default function PostCard({ post, wsId, onUpdate }: Props) {
               onClick={() => setShowSchedule(true)}
               className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
             >
-              📅 Schedule
+              📅 جدولة
             </button>
           )}
           <button
             onClick={() => { setEditing(true); setEditContent(post.content); setEditHashtags((post.hashtags || []).join(' ')); setEditTime(post.suggested_time) }}
             className="bg-white border border-gray-300 hover:border-gray-400 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
           >
-            ✏️ Edit
+            ✏️ تعديل
           </button>
           <button
             onClick={() => setShowRegen(true)}
             className="bg-white border border-violet-300 hover:border-violet-400 text-violet-700 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
           >
-            ✨ Regenerate
+            ✨ إعادة توليد
           </button>
           <button
             onClick={() => setShowReject(true)}
-            className="bg-white border border-red-200 hover:border-red-300 text-red-600 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ml-auto"
+            className="bg-white border border-red-200 hover:border-red-300 text-red-600 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors mr-auto"
           >
-            ✕ Reject
+            ✕ رفض
           </button>
         </div>
       )}
