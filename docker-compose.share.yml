@@ -1,0 +1,23 @@
+# Laptop-sharing overlay — puts everything behind a single HTTP port (80).
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.share.yml up --build
+#
+# Then expose port 80 via ngrok or cloudflared (see README for the commands).
+
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: marketing-nginx-share
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.share.conf:/etc/nginx/conf.d/default.conf:ro
+    networks: [marketing-net]
+    depends_on: [app, frontend]
+
+  # VITE_API_URL="" makes the frontend call /api/... as same-origin URLs.
+  # Nginx then proxies those to the FastAPI container — no hardcoded localhost needed.
+  frontend:
+    environment:
+      VITE_API_URL: ""
