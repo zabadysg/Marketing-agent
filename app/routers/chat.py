@@ -46,6 +46,9 @@ def _message_to_response(msg) -> ChatMessageResponse:
         role=msg.role,
         content=msg.content,
         metadata_=msg.metadata_,
+        agent_id=msg.agent_id,
+        meeting_id=msg.meeting_id,
+        turn_index=msg.turn_index,
         created_at=msg.created_at,
     )
 
@@ -187,13 +190,27 @@ async def send_message(
 
     brand_dict = brand_profile_to_dict(bp)
 
-    # Create placeholder assistant message id for the response
     import uuid
     placeholder_id = str(uuid.uuid4())
 
     if event_bus.exists(session_id):
         event_bus.close(session_id)
     event_bus.create(session_id)
+
+    mode = body.get("mode", "chat")
+    if mode == "meeting":
+        from app.agents.meeting_agent import run_meeting_agent
+        meeting_id = str(uuid.uuid4())
+        background_tasks.add_task(
+            run_meeting_agent,
+            session_id=session_id,
+            meeting_id=meeting_id,
+            workspace_id=workspace_id,
+            user_message=user_content,
+            brand_profile=brand_dict,
+            retrieved_context=retrieved_context,
+        )
+        return SendMessageResponse(message_id=placeholder_id, meeting_id=meeting_id)
 
     background_tasks.add_task(
         run_chat_agent,
