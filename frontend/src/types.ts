@@ -104,6 +104,9 @@ export interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   metadata_: Record<string, unknown>
+  agent_id?: string | null
+  meeting_id?: string | null
+  turn_index?: number | null
   created_at: string
 }
 

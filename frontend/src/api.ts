@@ -99,10 +99,10 @@ export const getChatSession = (wsId: string, sessionId: string) =>
   req<ChatSessionDetail>(`/api/workspaces/${wsId}/chat/sessions/${sessionId}`)
 export const deleteChatSession = (wsId: string, sessionId: string) =>
   req<void>(`/api/workspaces/${wsId}/chat/sessions/${sessionId}`, { method: 'DELETE' })
-export const sendChatMessage = (wsId: string, sessionId: string, content: string) =>
-  req<{ message_id: string }>(
+export const sendChatMessage = (wsId: string, sessionId: string, content: string, mode: 'chat' | 'meeting' = 'chat') =>
+  req<{ message_id: string; meeting_id?: string }>(
     `/api/workspaces/${wsId}/chat/sessions/${sessionId}/messages`,
-    { method: 'POST', body: JSON.stringify({ content }) }
+    { method: 'POST', body: JSON.stringify({ content, mode }) }
   )
 export const submitDraftPost = (postId: string) =>
   req<Post>(`/api/posts/${postId}:submit`, { method: 'POST' })
